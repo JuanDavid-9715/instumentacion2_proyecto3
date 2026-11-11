@@ -1,0 +1,65 @@
+# Configuracion del sistema de vision.
+#
+# Todo valor numerico del sistema vive aqui. Ningun umbral debe estar
+# escrito en el codigo. Validacion al arrancar: un valor fuera de rango
+# detiene el proceso con un mensaje claro, en lugar de arrancar a ciegas.
+
+camera:
+  # "device" para la camara USB, "file" para probar con un video grabado.
+  source: device
+  # En el PC de desarrollo la camara USB es /dev/video2.
+  # En la Raspberry Pi sera /dev/video0 con casi total seguridad: confirmar.
+  device: 2
+  # Solo se usa cuando source: file.
+  path: ""
+  width: 1280
+  height: 720
+  fps: 30
+  # MJPG es obligatorio: sin el, OpenCV negocia YUYV y cae a 5 fps a 720p.
+  fourcc: MJPG
+  buffersize: 1
+
+roi:
+  # Recorta la zona util de la banda. Fracciones del frame, no pixeles:
+  # la misma configuracion sirve para cualquier resolucion.
+  enabled: false
+  x: 0.10
+  y: 0.30
+  w: 0.80
+  h: 0.45
+
+detector:
+  # Maiz = amarillo/naranja saturado. El arroz es palido y poco saturado;
+  # la banda es negra y cae por debajo de val_min.
+  hue_min: 12      # 0-179 en OpenCV
+  hue_max: 38
+  sat_min: 120     # 0-255
+  val_min: 80      # 0-255
+  min_area_px: 300 # area minima de un grano para contar como contaminacion
+  morph_kernel: 5  # impar; limpia ruido de la mascara
+  open_iterations: 1
+  close_iterations: 2
+
+state:
+  # Histeresis: evita pausar por un solo frame ruidoso y reanudar antes
+  # de que el maiz salga de cuadro.
+  confirm_frames: 3
+  clear_frames: 8
+
+actuator:
+  # "mock" en el PC, "gpio" en la Raspberry Pi.
+  backend: mock
+  gpio_pin: 17
+  # Reles activos en bajo: IN=0 energiza. Confirmar con multimetro
+  # antes de conectar el PLC.
+  active_low: true
+
+web:
+  host: 0.0.0.0
+  port: 8000
+  jpeg_quality: 80
+  # Limita el ancho de banda del stream; 0 desactiva el limite.
+  stream_fps: 15
+
+logging:
+  level: INFO
