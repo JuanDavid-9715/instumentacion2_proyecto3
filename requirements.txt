@@ -14,3 +14,5 @@ gpiozero>=2.0
 
 # Pruebas
 pytest>=8.0
+# Cliente HTTP usado por fastapi.testclient
+httpx>=0.27

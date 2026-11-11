@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de visión — Línea de arroz</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --card: #1d2026;
+    --line: #2c3038;
+    --text: #e6e8ec;
+    --muted: #98a0ae;
+    --ok: #2fbf5f;
+    --bad: #e5484d;
+    --accent: #4c8dff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+    padding: 16px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .card h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  #video {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 12px currentColor;
+  }
+  .status.ok { color: var(--ok); }
+  .status.bad { color: var(--bad); }
+  .status.ok .dot { background: var(--ok); }
+  .status.bad .dot { background: var(--bad); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+  dt { color: var(--muted); font-size: 13px; }
+  dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+  fieldset { border: 0; padding: 0; margin: 0 0 14px; }
+  legend { font-size: 13px; color: var(--muted); margin-bottom: 8px; padding: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input {
+    background: #12141a;
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+    font-size: 14px;
+    width: 100%;
+    font-variant-numeric: tabular-nums;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 7px;
+    padding: 9px 14px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+  #message { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  #message.error { color: var(--bad); }
+  #message.success { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sistema de visión — Línea de arroz</h1>
+  <span class="sub">Detección de maíz sobre la banda de ingreso</span>
+</header>
+
+<main>
+  <section class="card">
+    <img id="video" src="/stream" alt="Video en vivo de la banda transportadora">
+  </section>
+
+  <aside>
+    <section class="card">
+      <h2>Estado de la línea</h2>
+      <div id="status" class="status bad">
+        <span class="dot"></span>
+        <span id="status-text">Sin señal</span>
+      </div>
+      <dl>
+        <dt>Área detectada</dt><dd id="area">—</dd>
+        <dt>Fotogramas</dt><dd id="frames">—</dd>
+        <dt>Velocidad</dt><dd id="fps">—</dd>
+        <dt>Detección</dt><dd id="detection">—</dd>
+        <dt>Confirmación</dt><dd id="dirty">—</dd>
+        <dt>Liberación</dt><dd id="clean">—</dd>
+        <dt>Errores</dt><dd id="errors">—</dd>
+      </dl>
+      <p id="last-error" class="note"></p>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Configuración</h2>
+      <form id="config-form">
+        <fieldset>
+          <legend>Color (HSV)</legend>
+          <div class="grid">
+            <label>Matiz mínimo<input name="hue_min" type="number" min="0" max="179" required></label>
+            <label>Matiz máximo<input name="hue_max" type="number" min="0" max="179" required></label>
+            <label>Saturación mínima<input name="sat_min" type="number" min="0" max="255" required></label>
+            <label>Brillo mínimo<input name="val_min" type="number" min="0" max="255" required></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Detección</legend>
+          <div class="grid">
+            <label>Área mínima (px)<input name="min_area_px" type="number" min="1" required></label>
+            <label>Kernel morfológico<input name="morph_kernel" type="number" min="1" step="2" required></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Histéresis</legend>
+          <div class="grid">
+            <label>Frames para pausar<input name="confirm_frames" type="number" min="1" required></label>
+            <label>Frames para reanudar<input name="clear_frames" type="number" min="1" required></label>
+          </div>
+        </fieldset>
+        <button type="submit" id="apply">Aplicar cambios</button>
+        <div id="message"></div>
+        <p class="note">Los cambios se aplican en memoria y se pierden al reiniciar. La configuración permanente vive en <code>config.yaml</code>.</p>
+      </form>
+    </section>
+  </aside>
+</main>
+
+<script>
+const form = document.getElementById("config-form");
+const message = document.getElementById("message");
+const applyButton = document.getElementById("apply");
+
+const fields = {
+  detector: ["hue_min", "hue_max", "sat_min", "val_min", "min_area_px", "morph_kernel"],
+  state: ["confirm_frames", "clear_frames"],
+};
+
+function setText(id, value) {
+  document.getElementById(id).textContent = value;
+}
+
+function renderState(state) {
+  const status = document.getElementById("status");
+  const text = document.getElementById("status-text");
+
+  if (state.frames === 0) {
+    status.className = "status bad";
+    text.textContent = "Sin señal";
+  } else if (state.ok) {
+    status.className = "status ok";
+    text.textContent = "Línea OK";
+  } else {
+    status.className = "status bad";
+    text.textContent = "Pausa";
+  }
+
+  setText("area", state.area_px > 0 ? state.area_px + " px" : "—");
+  setText("frames", state.frames);
+  setText("fps", state.fps ? state.fps.toFixed(1) + " fps" : "—");
+  setText("detection", state.detection_ms ? state.detection_ms.toFixed(1) + " ms" : "—");
+  setText("dirty", state.hysteresis.dirty_count + " / " + state.hysteresis.confirm_frames);
+  setText("clean", state.hysteresis.clean_count + " / " + state.hysteresis.clear_frames);
+  setText("errors", state.errors);
+  setText("last-error", state.last_error || "");
+}
+
+async function pollState() {
+  try {
+    const response = await fetch("/api/state", { cache: "no-store" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    renderState(await response.json());
+  } catch (error) {
+    document.getElementById("status").className = "status bad";
+    document.getElementById("status-text").textContent = "Sin conexión";
+  }
+}
+
+async function loadConfig() {
+  try {
+    const response = await fetch("/api/config", { cache: "no-store" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const config = await response.json();
+    for (const [section, names] of Object.entries(fields)) {
+      for (const name of names) {
+        if (form.elements[name] && config[section][name] !== undefined) {
+          form.elements[name].value = config[section][name];
+        }
+      }
+    }
+  } catch (error) {
+    message.textContent = "No se pudo leer la configuración: " + error.message;
+    message.className = "error";
+  }
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  applyButton.disabled = true;
+  message.textContent = "";
+  message.className = "";
+
+  const payload = { detector: {}, state: {} };
+  for (const [section, names] of Object.entries(fields)) {
+    for (const name of names) {
+      const value = Number(form.elements[name].value);
+      if (Number.isFinite(value)) payload[section][name] = value;
+    }
+  }
+
+  try {
+    const response = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || "HTTP " + response.status);
+    message.textContent = "Configuración aplicada.";
+    message.className = "success";
+  } catch (error) {
+    message.textContent = "Error: " + error.message;
+    message.className = "error";
+  } finally {
+    applyButton.disabled = false;
+  }
+});
+
+loadConfig();
+pollState();
+setInterval(pollState, 500);
+</script>
+</body>
+</html>
