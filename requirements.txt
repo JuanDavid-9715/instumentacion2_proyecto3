@@ -1,0 +1,16 @@
+# Dependencias del sistema de visión
+opencv-python-headless>=4.9
+numpy>=1.26
+
+# Configuración
+PyYAML>=6.0
+
+# Interfaz web
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# GPIO (solo se usa en la Raspberry Pi; en el PC se reemplaza por MockOutput)
+gpiozero>=2.0
+
+# Pruebas
+pytest>=8.0

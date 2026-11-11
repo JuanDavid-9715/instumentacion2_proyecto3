@@ -1,0 +1,57 @@
+# Entorno de Python
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+config.local.yaml
+
+# Datos del proyecto: no versionar
+data/
+recordings/
+logs/
+*.log
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Modelos de visión (fase 2)
+models/
+*.onnx
+*.ncnn
+*.tflite
+*.pt
+*.engine
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
