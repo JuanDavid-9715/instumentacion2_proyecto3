@@ -56,8 +56,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-python app.py     # arranca captura + detector + web
-pytest            # pruebas, no requieren hardware
+python app.py           # arranca captura + detector + web
+python app.py --probe   # abre la cámara, informa lo negociado y termina
+pytest                  # pruebas, no requieren hardware ni video
 ```
 
 La interfaz web queda en `http://<ip-de-la-pi>:8000`.
@@ -71,18 +72,22 @@ La interfaz web queda en `http://<ip-de-la-pi>:8000`.
 ```
 app.py                 composición: arranca todo
 config.yaml            umbrales, ROI, polaridad, device
+core/config.py         carga y validación del YAML
 core/capture.py        hilo único dueño del frame
 core/detector.py       detección (sin hardware)
 core/state.py          máquina de estados + histéresis (sin hardware)
 core/actuator.py       relé + fail-safe
+core/runtime.py        detector -> histéresis -> relé, estado compartido
 web/server.py          FastAPI: /stream, /api/state, /api/config
 web/static/index.html  interfaz
-tests/
+tests/                 pruebas sin hardware ni video
+odd/tasks/             documentos de trabajo por funcionalidad
 ```
 
 Reglas:
 
 - **Un solo `VideoCapture`.** El hilo de captura es el único dueño del frame. El detector y el stream web lo consumen desde `queue.Queue(maxsize=1)`.
+- El frame se comparte **de solo lectura**. Quien necesite dibujar (el overlay del stream) trabaja sobre una copia.
 - `detector` y `state` **no importan** cámara, GPIO ni framework web. Se prueban con video pregrabado y con un `MockOutput`.
 - Toda la configuración numérica vive en `config.yaml`. Nada de umbrales hardcodeados.
 - El dispositivo de video se lee de `config.yaml`, nunca hardcodeado: en el PC de desarrollo es `/dev/video2`, en la Pi será otro.
@@ -165,3 +170,40 @@ Para decidir dónde va una información nueva:
 
 - ¿Es estado que cambia y es local? → `MEMORY.md`
 - ¿Es una regla que no cambia y se puede publicar? → este archivo
+
+---
+
+## 11. Trabajo remoto en la Raspberry Pi
+
+El PC de desarrollo y la Raspberry Pi son dos entornos del mismo proyecto. El PC tiene más recursos y sirve para desarrollar y probar; la Pi es el destino final.
+
+### Autorización
+
+El trabajo remoto **no está implícito** en el permiso para trabajar en este repositorio. Antes de conectarse a la Pi, el usuario debe autorizar explícitamente en la sesión:
+
+1. **Destino**: host o IP y usuario.
+2. **Operaciones**: qué se permite ejecutar allí.
+3. **Credencial**: la llave SSH a usar.
+
+Si falta cualquiera de los tres, no se conecta y se trabaja en local.
+
+### Protocolo
+
+1. Desarrollar y probar en el PC, con `MockOutput` y video pregrabado.
+2. Verificar en local: `pytest` y una corrida del detector sobre video.
+3. Desplegar a la Pi por `scp` o `rsync`.
+4. Ejecutar en la Pi: `pytest`, luego `python app.py`.
+5. Verificar desde el navegador del PC: `http://<ip-de-la-pi>:8000`.
+
+### Reglas
+
+- Las llaves SSH son del usuario. **Nunca** se guardan contraseñas, tokens ni llaves privadas en el repositorio.
+- La Pi permanece en la red local. **Nunca** se expone SSH a internet.
+- No se instala nada en la Pi sin decirlo antes.
+- El PLC no se toca desde ningún entorno.
+- Todo comando remoto pasa por la regla `ask` del runtime: el usuario ve y aprueba cada uno.
+- Si el SSH no está disponible, se continúa en local y se reporta el bloqueo. No se adivina ni se prueba el destino.
+
+### Paridad de entornos
+
+El mismo código corre en ambos entornos sin cambios. La diferencia entre PC y Pi —cámara real frente a archivo, GPIO frente a `MockOutput`— se selecciona por configuración, nunca duplicando código.
