@@ -26,6 +26,9 @@ htmlcov/
 !.env.example
 config.local.yaml
 
+# Estado local del proyecto: nunca se publica
+MEMORY.md
+
 # Datos del proyecto: no versionar
 data/
 recordings/

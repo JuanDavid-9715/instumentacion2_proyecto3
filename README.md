@@ -141,7 +141,6 @@ Desde ahí se ve el video en vivo, el estado actual del detector y el último ev
 ## Documentación
 
 - [`AGENTS.md`](AGENTS.md) — arquitectura, comandos, reglas y prohibiciones
-- [`MEMORY.md`](MEMORY.md) — estado, decisiones justificadas, hardware medido y pendientes
 
 ---
 

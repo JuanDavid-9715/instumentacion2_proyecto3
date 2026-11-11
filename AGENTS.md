@@ -138,7 +138,7 @@ Sin esta regla, un fallo del software se traduce en producto contaminado saliend
 - No agregar `systemd`, autostart ni watchdog de servicio. El sistema se inicia a mano.
 - No usar Django.
 - No agregar frameworks de frontend (React, Vue, bundlers). Solo HTML, CSS y JS plano.
-- No commitear videos, capturas, modelos ni `config.local.yaml`.
+- No commitear videos, capturas, modelos, `config.local.yaml` ni `MEMORY.md`.
 - No dividir la aplicación en microservicios ni en procesos separados.
 - No reescribir este archivo sin un motivo concreto.
 
@@ -155,11 +155,13 @@ Sin esta regla, un fallo del software se traduce en producto contaminado saliend
 
 ## 10. Memoria del proyecto
 
-Antes de empezar a trabajar, **lee `MEMORY.md`**. Ahí están el estado actual, las decisiones ya tomadas con su justificación, los datos de hardware medidos y lo que falta.
+`MEMORY.md` es **local y no se versiona**: está en `.gitignore` y nunca se publica. Contiene el estado del proyecto, las decisiones tomadas con su justificación, los datos de hardware medidos y lo pendiente.
 
-Al cerrar un bloque de trabajo, actualízalo. La bitácora es append-only.
+Regla de contenido: no debe incluir datos personales, credenciales, direcciones IP, rutas absolutas de la máquina ni notas que no quieras ver publicadas.
+
+Si el archivo existe en la máquina, **léelo antes de empezar a trabajar** y actualízalo al cerrar un bloque. Si no existe, trabaja solo con este archivo.
 
 Para decidir dónde va una información nueva:
 
-- ¿Cambia cuando el proyecto avanza? → `MEMORY.md`
-- ¿Es una regla que no cambia? → este archivo
+- ¿Es estado que cambia y es local? → `MEMORY.md`
+- ¿Es una regla que no cambia y se puede publicar? → este archivo
