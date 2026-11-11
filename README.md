@@ -100,8 +100,8 @@ Usar el contacto **NC** y mantener la bobina energizada mientras el sistema est√
 ## Instalaci√≥n
 
 ```bash
-git clone https://github.com/<usuario>/<repo>.git
-cd <repo>
+git clone https://github.com/JuanDavid-9715/instumentacion2_proyecto3.git
+cd instumentacion2_proyecto3
 
 python3 -m venv .venv
 source .venv/bin/activate
