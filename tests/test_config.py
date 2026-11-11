@@ -107,3 +107,30 @@ def test_overrides_reject_sections_that_need_a_restart() -> None:
     config = load_config(PROJECT_ROOT / "config.yaml")
     with pytest.raises(ConfigError, match="unknown section"):
         apply_overrides(config, {"camera": {"device": 0}})
+
+
+def test_detector_thresholds_come_from_the_yaml(tmp_path: Path) -> None:
+    from core.actuator import MockOutput
+    from core.runtime import Runtime
+    from helpers import YELLOW, with_rect
+
+    strict = _write(tmp_path, "detector:\n  min_area_px: 10000\n")
+    runtime = Runtime(load_config(strict), output=MockOutput())
+    runtime.process(with_rect(300, 180, 60, 60, YELLOW))
+    assert runtime.snapshot().contaminated is False
+
+    relaxed = _write(tmp_path, "detector:\n  min_area_px: 300\n")
+    runtime = Runtime(load_config(relaxed), output=MockOutput())
+    runtime.process(with_rect(300, 180, 60, 60, YELLOW))
+    assert runtime.snapshot().contaminated is True
+
+
+def test_safety_timeout_is_validated(tmp_path: Path) -> None:
+    path = _write(tmp_path, "safety:\n  frame_timeout_s: 0.01\n")
+    with pytest.raises(ConfigError, match="frame_timeout_s"):
+        load_config(path)
+
+
+def test_project_config_declares_a_stale_frame_timeout() -> None:
+    config = load_config(PROJECT_ROOT / "config.yaml")
+    assert config.safety.frame_timeout_s > 0

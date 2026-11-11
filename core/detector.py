@@ -39,21 +39,28 @@ class CornDetector:
 
     def __init__(self, config: DetectorConfig, roi: RoiConfig | None = None) -> None:
         self._roi = roi or RoiConfig()
-        self._config = config
-        self._kernel = self._make_kernel(config.morph_kernel)
+        # Thresholds and kernel are swapped as one pair so a frame analysed on
+        # another thread never sees a mismatched combination.
+        self._settings: tuple[DetectorConfig, np.ndarray] = (
+            config,
+            self._make_kernel(config.morph_kernel),
+        )
 
     # -- configuration ---------------------------------------------------- #
 
     def reconfigure(self, config: DetectorConfig, roi: RoiConfig | None = None) -> None:
         """Apply new thresholds without restarting the process."""
-        self._config = config
-        self._kernel = self._make_kernel(config.morph_kernel)
+        self._settings = (config, self._make_kernel(config.morph_kernel))
         if roi is not None:
             self._roi = roi
 
     @property
     def config(self) -> DetectorConfig:
-        return self._config
+        return self._settings[0]
+
+    @property
+    def config(self) -> DetectorConfig:
+        return self._settings[0]
 
     @staticmethod
     def _make_kernel(size: int) -> np.ndarray:
@@ -76,7 +83,7 @@ class CornDetector:
             offset_x, offset_y, roi_w, roi_h = self._roi.as_pixels(width, height)
             view = frame_bgr[offset_y:offset_y + roi_h, offset_x:offset_x + roi_w]
 
-        cfg = self._config
+        cfg, kernel = self._settings
         hsv = cv2.cvtColor(view, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(
             hsv,
@@ -85,9 +92,9 @@ class CornDetector:
         )
 
         if cfg.open_iterations > 0:
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel, iterations=cfg.open_iterations)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=cfg.open_iterations)
         if cfg.close_iterations > 0:
-            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._kernel, iterations=cfg.close_iterations)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=cfg.close_iterations)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 

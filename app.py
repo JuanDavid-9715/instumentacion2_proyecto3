@@ -18,6 +18,7 @@ import queue
 import signal
 import sys
 import threading
+import time
 from typing import Sequence
 
 import uvicorn
@@ -67,10 +68,7 @@ def _install_signal_handlers(runtime: Runtime, stop: threading.Event) -> dict[in
 
     def handler(signum: int, _frame) -> None:
         log.warning("signal %s received: pausing the line", signum)
-        try:
-            runtime.output.safe()
-        except Exception:  # noqa: BLE001 - a handler must never raise
-            log.exception("could not de-energize the relay from the signal handler")
+        runtime.begin_shutdown()
         stop.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -119,15 +117,26 @@ def run(config: AppConfig, *, with_web: bool = True) -> int:
             log.info("web interface: http://%s:%d", config.web.host, config.web.port)
 
         subscriber = runtime.bus.subscribe()
+        timeout = config.safety.frame_timeout_s
+        last_frame_at = time.monotonic()
+        stale = False
         log.info("system running; the line stays paused until the first frame is analysed")
 
         while not stop.is_set():
             try:
                 frame = subscriber.get(timeout=0.5)
             except queue.Empty:
+                if not stale and time.monotonic() - last_frame_at > timeout:
+                    log.error("no frame analysed for %.1f s: pausing the line", timeout)
+                    runtime.force_pause(f"no frames for {timeout:.1f} s")
+                    stale = True
                 continue
             if frame is None:
                 break
+            if stale:
+                log.warning("frames are back after a gap; the hysteresis must clear first")
+                stale = False
+            last_frame_at = time.monotonic()
             runtime.process(frame)
     except Exception:  # noqa: BLE001 - log, pause, and exit non-zero
         log.exception("fatal error in the main loop")

@@ -55,3 +55,18 @@ capture thread stopped after 90 frames
 **Evidencia L3 — cámara real.** `python app.py --probe` abrió `/dev/video2` a 1280×720 @ 30 fps con la receta de `AGENTS.md` §6.
 
 **Nota L3.** OpenCV instalado resultó ser **5.0.0**, no 4.x. La API usada (`inRange`, `findContours`, `morphologyEx`, `imencode`, `VideoWriter_fourcc`) se comporta igual. Verificado antes de escribir código.
+
+## Log — verificación independiente (L4)
+
+**Veredicto del verificador:** S1–S10 cumplidos, **0 bloqueantes**, 91 pruebas en verde.
+
+**Dos hallazgos de seguridad corregidos en L4:**
+
+1. **Pérdida de cámara dejaba el relé energizado.** Sin frames, el snapshot quedaba congelado en `ok=true` y la línea seguía avanzando a ciegas. Corregido con `safety.frame_timeout_s`: si no se analiza un frame en ese tiempo, `Runtime.force_pause()` pausa la línea. Verificado de punta a punta quitando el video a mitad de corrida.
+2. **`SIGTERM` podía ser deshecho por el frame en vuelo.** El manejador desenergizaba, pero `process()` en curso volvía a energizar. Corregido con `Runtime.begin_shutdown()`, que marca un evento; `_command()` se niega a energizar después y deshace el comando si la señal llegó en la ventana de carrera.
+
+**Correcciones menores:** el detector intercambia umbrales y kernel como una sola tupla (sin lectura rasgada), y se sustituyeron dos aserciones vacuas de `test_runtime.py`.
+
+**Pruebas aportadas por el verificador y adoptadas:** `tests/test_app_failsafe.py` (nivel proceso: SIGTERM, error fatal, excepción del detector, fallo de apertura, pérdida de cámara), `tests/test_state_boundaries.py`, `tests/test_capture_bus.py`, más dos casos en `test_config.py` y uno en `test_web.py`.
+
+**Resultado final:** **111 pruebas, 5 corridas consecutivas en verde**, estables.

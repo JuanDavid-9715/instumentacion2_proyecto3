@@ -63,3 +63,10 @@ web:
 
 logging:
   level: INFO
+
+safety:
+  # Si no se analiza ningun frame durante este tiempo, la linea se pausa.
+  # Sin esto, una camara desconectada congelaria el estado en "OK" y la
+  # banda seguiria avanzando a ciegas: el peor fallo posible en un diseno
+  # fail-safe.
+  frame_timeout_s: 2.0

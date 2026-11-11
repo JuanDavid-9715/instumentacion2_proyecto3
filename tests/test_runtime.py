@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -117,7 +119,9 @@ def test_snapshot_counts_frames_and_measures_fps() -> None:
         runtime.process(blank())
     snapshot = runtime.snapshot()
     assert snapshot.frames == 5
-    assert snapshot.fps >= 0.0
+    assert math.isfinite(snapshot.fps)
+    assert snapshot.fps > 0
+    assert snapshot.detection_ms >= 0
 
 
 def test_apply_config_changes_the_detector_threshold() -> None:
@@ -128,8 +132,11 @@ def test_apply_config_changes_the_detector_threshold() -> None:
 
 
 def test_apply_config_changes_the_hysteresis() -> None:
-    public = Runtime(make_config(), output=MockOutput()).apply_config({"state": {"confirm_frames": 7}})
+    runtime, _ = build()
+    public = runtime.apply_config({"state": {"confirm_frames": 7}})
     assert public["state"]["confirm_frames"] == 7
+    assert runtime.machine.config.confirm_frames == 7
+    assert runtime.snapshot().confirm_frames == 7
 
 
 def test_apply_config_rejects_unknown_fields() -> None:

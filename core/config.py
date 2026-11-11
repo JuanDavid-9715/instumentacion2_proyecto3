@@ -99,6 +99,16 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class SafetyConfig:
+    """Timing that keeps the system honest when the camera goes quiet."""
+
+    # If no frame is analysed for this long, the line is paused. Without it a
+    # disconnected camera would freeze the snapshot at "OK" and the line would
+    # keep running blind: the worst possible failure for a fail-safe design.
+    frame_timeout_s: float = 2.0
+
+
+@dataclass(frozen=True)
 class AppConfig:
     camera: CameraConfig
     roi: RoiConfig
@@ -107,6 +117,7 @@ class AppConfig:
     actuator: ActuatorConfig
     web: WebConfig
     logging: LoggingConfig
+    safety: SafetyConfig = SafetyConfig()
     source_path: str = "config.yaml"
 
     def public_dict(self) -> dict[str, Any]:
@@ -273,6 +284,13 @@ def _build_logging(raw: Mapping[str, Any]) -> LoggingConfig:
     return LoggingConfig(level=level)
 
 
+def _build_safety(raw: Mapping[str, Any]) -> SafetyConfig:
+    timeout = _as_float(_get(raw, "frame_timeout_s", 2.0, "safety"), "safety.frame_timeout_s")
+    if not 0.2 <= timeout <= 60.0:
+        raise ConfigError(f"safety.frame_timeout_s must be between 0.2 and 60.0, got {timeout}")
+    return SafetyConfig(frame_timeout_s=timeout)
+
+
 def _build(raw: Mapping[str, Any], source_path: str) -> AppConfig:
     return AppConfig(
         camera=_build_camera(_section(raw, "camera")),
@@ -282,6 +300,7 @@ def _build(raw: Mapping[str, Any], source_path: str) -> AppConfig:
         actuator=_build_actuator(_section(raw, "actuator")),
         web=_build_web(_section(raw, "web")),
         logging=_build_logging(_section(raw, "logging")),
+        safety=_build_safety(_section(raw, "safety")),
         source_path=source_path,
     )
 

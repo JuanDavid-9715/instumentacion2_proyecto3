@@ -100,6 +100,7 @@ class Runtime:
         )
         self._timestamps: deque[float] = deque(maxlen=_FPS_WINDOW)
         self._last_ok: bool | None = None
+        self._stopping = threading.Event()
 
     # -- configuration ---------------------------------------------------- #
 
@@ -147,7 +148,7 @@ class Runtime:
             detection = self.detector.detect(frame)
         except Exception as exc:  # noqa: BLE001 - a broken detector must pause the line
             log.exception("detector failure; pausing the line")
-            self._force_pause(f"detector: {exc}")
+            self.force_pause(f"detector: {exc}")
             return self.snapshot()
 
         ok = self.machine.update(detection.contaminated)
@@ -155,7 +156,22 @@ class Runtime:
         self._publish(detection, ok)
         return self.snapshot()
 
+    def begin_shutdown(self) -> None:
+        """Pause the line and refuse any further command to energize.
+
+        Called from the signal handler. Without the flag, the frame already in
+        flight would finish its ``process()`` and command the relay back on
+        after the handler de-energized it.
+        """
+        self._stopping.set()
+        try:
+            self.output.safe()
+        except Exception:  # noqa: BLE001 - the handler must never raise
+            log.exception("could not de-energize the relay during shutdown")
+
     def _command(self, ok: bool) -> None:
+        if self._stopping.is_set():
+            return
         try:
             self.output.set_ok(ok)
         except Exception:  # noqa: BLE001 - never let the actuator kill the loop
@@ -164,8 +180,18 @@ class Runtime:
                 self.output.safe()
             except Exception:  # noqa: BLE001
                 log.exception("actuator safe() failed too")
+            return
+        if self._stopping.is_set():
+            # A signal interrupted us between the check and the command: undo
+            # it. A lock cannot be used here because a signal handler runs on
+            # this very thread and would risk deadlocking.
+            try:
+                self.output.safe()
+            except Exception:  # noqa: BLE001
+                log.exception("actuator safe() failed after shutdown")
 
-    def _force_pause(self, message: str) -> None:
+    def force_pause(self, reason: str) -> None:
+        """Pause the line and record why. Used for detector and camera faults."""
         self.machine.reset()
         self._command(False)
         with self._lock:
@@ -173,7 +199,7 @@ class Runtime:
                 self._snapshot,
                 ok=False,
                 errors=self._snapshot.errors + 1,
-                last_error=message,
+                last_error=reason,
                 updated_at=time.time(),
                 dirty_count=self.machine.snapshot(False).dirty_count,
                 clean_count=self.machine.snapshot(False).clean_count,

@@ -18,6 +18,7 @@ from core.config import (
     DetectorConfig,
     LoggingConfig,
     RoiConfig,
+    SafetyConfig,
     StateConfig,
     WebConfig,
 )
@@ -62,6 +63,7 @@ def make_config(
     actuator: ActuatorConfig | None = None,
     camera: CameraConfig | None = None,
     web: WebConfig | None = None,
+    safety: SafetyConfig | None = None,
 ) -> AppConfig:
     """A valid configuration with test-friendly defaults."""
     return AppConfig(
@@ -72,6 +74,7 @@ def make_config(
         actuator=actuator or ActuatorConfig(backend="mock"),
         web=web or WebConfig(),
         logging=LoggingConfig(),
+        safety=safety or SafetyConfig(),
         source_path="<test>",
     )
 

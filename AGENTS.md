@@ -132,6 +132,8 @@ Cualquier salida del proceso debe dejar la salida en estado seguro:
 1. `try/except/finally`: el `finally` desenergiza el relé.
 2. Manejadores de `SIGINT` y `SIGTERM` que desenergizan antes de salir.
 3. Una excepción no capturada nunca debe dejar el relé energizado.
+4. Si no se analiza ningún frame durante `safety.frame_timeout_s`, la línea se pausa. Una cámara desconectada no puede dejar la banda corriendo a ciegas.
+5. Un fallo del detector pausa la línea: si no se puede analizar, no se libera.
 
 Sin esta regla, un fallo del software se traduce en producto contaminado saliendo de la línea.
 

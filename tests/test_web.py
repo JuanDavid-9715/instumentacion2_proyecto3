@@ -86,6 +86,16 @@ def test_config_write_rejects_a_malformed_body() -> None:
     assert response.status_code == 400
 
 
+def test_config_write_never_touches_config_yaml() -> None:
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "config.yaml"
+    before = path.read_bytes()
+    client, _, _ = build()
+    assert client.post("/api/config", json={"detector": {"min_area_px": 900}}).status_code == 200
+    assert path.read_bytes() == before
+
+
 def test_health_reports_no_frames_before_capturing() -> None:
     client, _, _ = build()
     payload = client.get("/api/health").json()
