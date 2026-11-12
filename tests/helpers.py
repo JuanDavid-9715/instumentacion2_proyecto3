@@ -14,6 +14,7 @@ import numpy as np
 from core.config import (
     ActuatorConfig,
     AppConfig,
+    BeltConfig,
     CameraConfig,
     DetectorConfig,
     LoggingConfig,
@@ -60,6 +61,7 @@ def make_config(
     detector: DetectorConfig | None = None,
     state: StateConfig | None = None,
     roi: RoiConfig | None = None,
+    belt: BeltConfig | None = None,
     actuator: ActuatorConfig | None = None,
     camera: CameraConfig | None = None,
     web: WebConfig | None = None,
@@ -74,6 +76,7 @@ def make_config(
         actuator=actuator or ActuatorConfig(backend="mock"),
         web=web or WebConfig(),
         logging=LoggingConfig(),
+        belt=belt or BeltConfig(),
         safety=safety or SafetyConfig(),
         source_path="<test>",
     )

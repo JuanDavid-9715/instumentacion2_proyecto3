@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from core.config import DetectorConfig, RoiConfig
+from core.config import BeltConfig, DetectorConfig, RoiConfig
 from core.detector import CornDetector
 from helpers import BLACK, DARK_YELLOW, GREY_SHADOW, ORANGE, RICE, YELLOW, blank, with_rect
 
@@ -115,3 +115,74 @@ def test_reconfigure_swaps_the_roi(detector: CornDetector) -> None:
 
 def test_black_color_is_not_detected(detector: CornDetector) -> None:
     assert detector.detect(with_rect(300, 180, 60, 60, BLACK)).contaminated is False
+
+
+def test_belt_polygon_ignores_corn_outside_it() -> None:
+    """A yellow object beside the belt must not pause the line."""
+    belt = BeltConfig(
+        enabled=True,
+        points=((0.25, 0.0), (0.75, 0.0), (0.75, 1.0), (0.25, 1.0)),
+    )
+    detector = CornDetector(DetectorConfig(), belt=belt)
+    assert detector.detect(with_rect(10, 100, 40, 40, YELLOW)).contaminated is False
+    assert detector.detect(with_rect(300, 100, 40, 40, YELLOW)).contaminated is True
+
+
+def test_belt_polygon_clips_a_blob_that_crosses_its_edge() -> None:
+    belt = BeltConfig(
+        enabled=True,
+        points=((0.5, 0.0), (1.0, 0.0), (1.0, 1.0), (0.5, 1.0)),
+    )
+    detector = CornDetector(DetectorConfig(), belt=belt)
+    result = detector.detect(with_rect(260, 100, 120, 60, YELLOW))
+    assert result.contaminated is True
+    x, _, w, _ = result.boxes[0]
+    assert 318 <= x <= 322
+    assert w <= 66
+
+
+def test_belt_edge_does_not_bridge_two_blobs_across_it() -> None:
+    """Closing must not pull an outside blob into the belt through a gap."""
+    belt = BeltConfig(
+        enabled=True,
+        points=((0.5, 0.0), (1.0, 0.0), (1.0, 1.0), (0.5, 1.0)),
+    )
+    detector = CornDetector(DetectorConfig(min_area_px=10), belt=belt)
+    frame = blank()
+    frame[100:160, 295:318] = YELLOW  # outside the belt, which starts at x = 320
+    frame[100:160, 321:344] = YELLOW  # inside
+    result = detector.detect(frame)
+    assert result.contaminated is True
+    assert len(result.boxes) == 1
+    # Only the inside blob counts. contourArea returns (w-1)*(h-1), so 22*59.
+    # Bridging the gap across the boundary would add columns and push this
+    # over 1350.
+    assert 1280 <= result.area_px <= 1330
+
+
+def test_belt_polygon_and_roi_work_together() -> None:
+    belt = BeltConfig(
+        enabled=True,
+        points=((0.25, 0.0), (0.75, 0.0), (0.75, 1.0), (0.25, 1.0)),
+    )
+    roi = RoiConfig(enabled=True, x=0.0, y=0.0, w=0.5, h=1.0)
+    detector = CornDetector(DetectorConfig(), roi, belt)
+    result = detector.detect(with_rect(150, 100, 60, 60, YELLOW))
+    assert result.contaminated is True
+    x, _, w, _ = result.boxes[0]
+    assert 158 <= x <= 162  # clipped by the polygon edge at x = 160
+    assert w <= 56
+
+
+def test_reconfigure_swaps_the_belt_polygon() -> None:
+    detector = CornDetector(DetectorConfig())
+    frame = with_rect(10, 100, 40, 40, YELLOW)
+    assert detector.detect(frame).contaminated is True
+    detector.reconfigure(
+        DetectorConfig(),
+        belt=BeltConfig(
+            enabled=True,
+            points=((0.25, 0.0), (0.75, 0.0), (0.75, 1.0), (0.25, 1.0)),
+        ),
+    )
+    assert detector.detect(frame).contaminated is False

@@ -20,22 +20,100 @@ camera:
   buffersize: 1
 
 roi:
-  # Recorta la zona util de la banda. Fracciones del frame, no pixeles:
-  # la misma configuracion sirve para cualquier resolucion.
-  enabled: false
-  x: 0.10
-  y: 0.30
-  w: 0.80
-  h: 0.45
+  # Caja contenedora del poligono de la banda. Fracciones del frame, no
+  # pixeles: la misma configuracion sirve para cualquier resolucion.
+  #
+  # El recorte es una optimizacion, no la seleccion fina: la forma exacta la
+  # pone 'belt' mas abajo. Este rectangulo solo limita el costo de analisis.
+  #
+  # Corregido el 2026-11-12: la primera medicion de perspectiva (13x entre el
+  # fondo y el frente) estaba mal. Venia de un grano cortado por el borde del
+  # cuadro. Medido bien, el mismo grano es ~3x mas pequeno al fondo que al
+  # frente, que si admite un unico min_area_px. Por eso el ROI ya no corta la
+  # parte de atras.
+  enabled: true
+  x: 0.30
+  y: 0.00
+  w: 0.50
+  h: 1.00
+
+belt:
+  # Poligono que sigue la superficie VISIBLE de la banda, en fracciones del
+  # frame. Solo se analiza lo que cae dentro: un objeto amarillo en la mesa,
+  # en la estructura o en los rieles de la banda no puede pausar la linea.
+  #
+  # Trazado el 2026-11-12 sobre la imagen real con rejilla. Dos correcciones
+  # sobre el primer intento, que dejaba pasar la estructura naranja:
+  #
+  # 1. La banda se ve en perspectiva (trapecio), asi que una caja no la sigue.
+  # 2. El poligono va POR DENTRO de los rieles metalicos laterales. Los rieles
+  #    son claros y con luz calida se saturan, y ademas las bases naranjas de
+  #    los extremos invaden hasta 20-30 px del borde visible. Por eso el
+  #    vertice inferior derecho es 975 y no 1020: de 1000 en adelante hay base
+  #    naranja, y a la izquierda de 430 hay riel metalico.
+  #
+  # Se pierde una franja de ~10-30 px de banda en los extremos. Es a proposito:
+  # ahi no cabe un grano entero y a cambio ninguna pieza de la maquina puede
+  # disparar la pausa. Verificado: 0 px de estructura naranja dentro del
+  # poligono y el 100% de los granos de maiz dentro.
+  #
+  # Si se mueve la camara o cambia el montaje, este poligono se vuelve a
+  # trazar. Es la unica pieza de la configuracion que depende del encuadre
+  # ademas del ROI.
+  enabled: true
+  points:
+    - [0.457, 0.000]   # arriba izquierda, dentro del borde (naranja a 500-570)
+    - [0.639, 0.000]   # arriba derecha: la base naranja empieza en x 846, medido en vivo
+    - [0.690, 0.333]
+    - [0.746, 0.639]
+    - [0.762, 0.856]   # comienza la base naranja inferior derecha
+    - [0.762, 1.000]
+    - [0.344, 1.000]
+    - [0.344, 0.856]   # comienza el riel metalico inferior izquierdo
+    - [0.367, 0.639]
+    - [0.391, 0.333]
 
 detector:
   # Maiz = amarillo/naranja saturado. El arroz es palido y poco saturado;
   # la banda es negra y cae por debajo de val_min.
-  hue_min: 12      # 0-179 en OpenCV
+  # Matiz: el maiz va de 25 a 37 y las piezas naranjas de la maquina (bases y
+  # rieles de la banda) de 8 a 19. Con 12 el naranja entraba a la mascara y el
+  # riel superior generaba una caja falsa de 567 px. Con 20 queda fuera y el
+  # maiz conserva el 94.1% de sus pixeles. Es la segunda defensa: el poligono
+  # de 'belt' ya los deja fuera por geometria, esto protege si el encuadre se
+  # corre unos pixeles o si el balance de blancos deriva.
+  hue_min: 20      # 0-179 en OpenCV
   hue_max: 38
-  sat_min: 120     # 0-255
+  # Medido el 2026-11-12 con la iluminacion definitiva (blanca, no la
+  # temporal calida). La luz blanca baja la saturacion del maiz: con 120 el
+  # grano quedaba pegado al umbral.
+  #
+  # Con la escena bien iluminada el brillo de los granos del fondo se satura
+  # y el maiz pierde color: la mediana de saturacion por grano va de 70 a
+  # 138, y con sat_min 100 solo entra el 34.5% de los pixeles de maiz, con
+  # 80 entra el 49%. El arroz (S 25-36, p95 51) y la banda (S 20) quedan en
+  # 0.00% de pixeles en la mascara incluso con 60, o sea que hay margen de
+  # sobra. 80 duplica la senal util sin agregar ni una deteccion fuera de la
+  # linea de maiz.
+  #
+  # Se prefiere bajo por la misma razon que min_area_px: un falso negativo
+  # deja pasar maiz a la linea, un falso positivo solo cuesta una pausa.
+  sat_min: 80      # 0-255
   val_min: 80      # 0-255
-  min_area_px: 300 # area minima de un grano para contar como contaminacion
+  # Medido el 2026-11-12 sobre los granos de la linea de maiz: los contornos
+  # reales del detector miden 114-2055 px, y los granos mas al fondo son los
+  # chicos, 114-171 px. Con 150 el margen del grano mas lejano era de solo
+  # 1.3x, y por eso la parte de atras se perdia de forma intermitente.
+  #
+  # 120 deja 1.6x de margen. Bajarlo no cuesta nada medido: dentro del
+  # poligono de la banda, fuera de la linea de maiz, no aparecio ni un
+  # componente saturado en 40 frames; todo lo chico que se descarta son
+  # fragmentos de granos de maiz reales. 100 y 80 dan las mismas detecciones
+  # que 120, asi que 120 es el mayor valor que cubre el grano mas lejano.
+  #
+  # Se prefiere bajo: un falso negativo deja pasar maiz a la linea, un falso
+  # positivo solo cuesta una pausa.
+  min_area_px: 120
   morph_kernel: 5  # impar; limpia ruido de la mascara
   open_iterations: 1
   close_iterations: 2

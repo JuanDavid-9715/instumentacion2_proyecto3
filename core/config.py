@@ -61,6 +61,30 @@ class RoiConfig:
 
 
 @dataclass(frozen=True)
+class BeltConfig:
+    """Polygon that follows the conveyor belt, in fractions of the frame.
+
+    A rectangle cannot follow a belt seen in perspective: it either includes
+    the table and the frame beside the belt, or cuts the belt itself. Tracing
+    the belt surface keeps the detector on the belt, so a yellow object lying
+    outside it can never pause the line.
+    """
+
+    enabled: bool = False
+    points: tuple[tuple[float, float], ...] = ()
+
+    def as_points(self, width: int, height: int) -> tuple[tuple[int, int], ...]:
+        """Return the polygon vertices in pixels, clamped to the frame."""
+        return tuple(
+            (
+                max(0, min(width - 1, int(round(px * width)))),
+                max(0, min(height - 1, int(round(py * height)))),
+            )
+            for px, py in self.points
+        )
+
+
+@dataclass(frozen=True)
 class DetectorConfig:
     hue_min: int = 12
     hue_max: int = 38
@@ -117,6 +141,7 @@ class AppConfig:
     actuator: ActuatorConfig
     web: WebConfig
     logging: LoggingConfig
+    belt: BeltConfig = BeltConfig()
     safety: SafetyConfig = SafetyConfig()
     source_path: str = "config.yaml"
 
@@ -126,6 +151,10 @@ class AppConfig:
             "detector": dict(self.detector.__dict__),
             "state": dict(self.state.__dict__),
             "roi": dict(self.roi.__dict__),
+            "belt": {
+                "enabled": self.belt.enabled,
+                "points": [list(point) for point in self.belt.points],
+            },
             "actuator": {"backend": self.actuator.backend},
             "camera": {
                 "source": self.camera.source,
@@ -232,6 +261,28 @@ def _build_roi(raw: Mapping[str, Any]) -> RoiConfig:
     return roi
 
 
+def _build_belt(raw: Mapping[str, Any]) -> BeltConfig:
+    enabled = _as_bool(_get(raw, "enabled", False, "belt"), "belt.enabled")
+    raw_points = raw.get("points") or []
+    if not isinstance(raw_points, (list, tuple)):
+        raise ConfigError("belt.points must be a list of [x, y] pairs")
+    points: list[tuple[float, float]] = []
+    for index, item in enumerate(raw_points):
+        where = f"belt.points[{index}]"
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ConfigError(f"{where} must be an [x, y] pair")
+        px = _as_float(item[0], f"{where}[0]")
+        py = _as_float(item[1], f"{where}[1]")
+        if not 0.0 <= px <= 1.0:
+            raise ConfigError(f"{where}.x must be between 0.0 and 1.0, got {px}")
+        if not 0.0 <= py <= 1.0:
+            raise ConfigError(f"{where}.y must be between 0.0 and 1.0, got {py}")
+        points.append((px, py))
+    if enabled and len(points) < 3:
+        raise ConfigError("belt.points needs at least 3 points when belt.enabled is true")
+    return BeltConfig(enabled=enabled, points=tuple(points))
+
+
 def _build_detector(raw: Mapping[str, Any]) -> DetectorConfig:
     cfg = DetectorConfig(
         hue_min=_in_range(_as_int(_get(raw, "hue_min", 12, "detector"), "detector.hue_min"), 0, 179, "detector.hue_min"),
@@ -300,6 +351,7 @@ def _build(raw: Mapping[str, Any], source_path: str) -> AppConfig:
         actuator=_build_actuator(_section(raw, "actuator")),
         web=_build_web(_section(raw, "web")),
         logging=_build_logging(_section(raw, "logging")),
+        belt=_build_belt(_section(raw, "belt")),
         safety=_build_safety(_section(raw, "safety")),
         source_path=source_path,
     )

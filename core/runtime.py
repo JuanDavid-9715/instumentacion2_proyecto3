@@ -85,7 +85,7 @@ class Runtime:
         self._lock = threading.Lock()
         self._config = config
         self.bus = bus or FrameBus()
-        self.detector = detector or CornDetector(config.detector, config.roi)
+        self.detector = detector or CornDetector(config.detector, config.roi, config.belt)
         self.machine = machine or LineStateMachine(config.state)
         self.output = output or make_output(config.actuator)
 
@@ -113,7 +113,7 @@ class Runtime:
         with self._lock:
             updated = apply_overrides(self._config, payload)
             self._config = updated
-            self.detector.reconfigure(updated.detector, updated.roi)
+            self.detector.reconfigure(updated.detector, updated.roi, updated.belt)
             self.machine.reconfigure(updated.state)
             self._snapshot = replace(
                 self._snapshot,

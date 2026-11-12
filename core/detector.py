@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from core.config import DetectorConfig, RoiConfig
+from core.config import BeltConfig, DetectorConfig, RoiConfig
 
 
 @dataclass(frozen=True)
@@ -37,8 +37,14 @@ class Detection:
 class CornDetector:
     """HSV threshold + morphology + contour area."""
 
-    def __init__(self, config: DetectorConfig, roi: RoiConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: DetectorConfig,
+        roi: RoiConfig | None = None,
+        belt: BeltConfig | None = None,
+    ) -> None:
         self._roi = roi or RoiConfig()
+        self._belt = belt or BeltConfig()
         # Thresholds and kernel are swapped as one pair so a frame analysed on
         # another thread never sees a mismatched combination.
         self._settings: tuple[DetectorConfig, np.ndarray] = (
@@ -48,11 +54,18 @@ class CornDetector:
 
     # -- configuration ---------------------------------------------------- #
 
-    def reconfigure(self, config: DetectorConfig, roi: RoiConfig | None = None) -> None:
+    def reconfigure(
+        self,
+        config: DetectorConfig,
+        roi: RoiConfig | None = None,
+        belt: BeltConfig | None = None,
+    ) -> None:
         """Apply new thresholds without restarting the process."""
         self._settings = (config, self._make_kernel(config.morph_kernel))
         if roi is not None:
             self._roi = roi
+        if belt is not None:
+            self._belt = belt
 
     @property
     def config(self) -> DetectorConfig:
@@ -91,10 +104,30 @@ class CornDetector:
             np.array([cfg.hue_max, 255, 255], dtype=np.uint8),
         )
 
+        # The belt polygon is applied twice on purpose.
+        #
+        # Before the morphology, so a blob sitting just outside the belt can
+        # never be closed into it: closing grows a mask by half the kernel per
+        # iteration, and an orange base 5 px away from the boundary would bleed
+        # straight in.
+        #
+        # After the morphology as well, so nothing that was already inside can
+        # grow past the belt edge either.
+        belt_mask = None
+        if self._belt.enabled and self._belt.points:
+            polygon = np.array(self._belt.as_points(width, height), dtype=np.int32)
+            polygon = polygon - np.array((offset_x, offset_y), dtype=np.int32)
+            belt_mask = np.zeros(mask.shape, dtype=np.uint8)
+            cv2.fillPoly(belt_mask, [polygon], 255)
+            mask = cv2.bitwise_and(mask, belt_mask)
+
         if cfg.open_iterations > 0:
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=cfg.open_iterations)
         if cfg.close_iterations > 0:
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=cfg.close_iterations)
+
+        if belt_mask is not None:
+            mask = cv2.bitwise_and(mask, belt_mask)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 

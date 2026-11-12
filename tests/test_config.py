@@ -131,6 +131,53 @@ def test_safety_timeout_is_validated(tmp_path: Path) -> None:
         load_config(path)
 
 
+def test_belt_polygon_is_read_from_the_yaml(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "belt:\n  enabled: true\n  points:\n    - [0.1, 0.0]\n    - [0.9, 0.0]\n    - [0.5, 1.0]\n",
+    )
+    config = load_config(path)
+    assert config.belt.enabled is True
+    assert len(config.belt.points) == 3
+    assert config.belt.as_points(1000, 500) == ((100, 0), (900, 0), (500, 499))
+
+
+def test_enabled_belt_with_too_few_points_is_an_error(tmp_path: Path) -> None:
+    path = _write(tmp_path, "belt:\n  enabled: true\n  points:\n    - [0.1, 0.0]\n    - [0.9, 0.0]\n")
+    with pytest.raises(ConfigError, match="at least 3 points"):
+        load_config(path)
+
+
+def test_belt_point_outside_the_frame_is_an_error(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "belt:\n  enabled: true\n  points:\n    - [0.1, 0.0]\n    - [1.5, 0.0]\n    - [0.5, 1.0]\n",
+    )
+    with pytest.raises(ConfigError, match="belt.points"):
+        load_config(path)
+
+
+def test_belt_point_with_the_wrong_shape_is_an_error(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "belt:\n  enabled: true\n  points:\n    - [0.1, 0.0]\n    - [0.9]\n    - [0.5, 1.0]\n",
+    )
+    with pytest.raises(ConfigError, match="pair"):
+        load_config(path)
+
+
+def test_disabled_belt_needs_no_points(tmp_path: Path) -> None:
+    config = load_config(_write(tmp_path, "belt:\n  enabled: false\n"))
+    assert config.belt.enabled is False
+    assert config.belt.points == ()
+
+
+def test_project_config_traces_the_belt() -> None:
+    config = load_config(PROJECT_ROOT / "config.yaml")
+    assert config.belt.enabled is True
+    assert len(config.belt.points) >= 3
+
+
 def test_project_config_declares_a_stale_frame_timeout() -> None:
     config = load_config(PROJECT_ROOT / "config.yaml")
     assert config.safety.frame_timeout_s > 0
