@@ -141,6 +141,7 @@ Desde ahí se ve el video en vivo, el estado actual del detector y el último ev
 ## Documentación
 
 - [`AGENTS.md`](AGENTS.md) — arquitectura, comandos, reglas y prohibiciones
+- [`docs/despliegue-raspberry.md`](docs/despliegue-raspberry.md) — puesta en marcha completa en la Raspberry Pi y conexión con el PLC
 
 ---
 
