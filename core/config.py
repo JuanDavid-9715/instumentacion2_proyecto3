@@ -35,6 +35,10 @@ class CameraConfig:
     fps: int = 30
     fourcc: str = "MJPG"
     buffersize: int = 1
+    # Manual exposure in the driver's units (0 = leave whatever the driver
+    # has). Auto exposure is not usable on the Pi: with this camera and this
+    # lighting it converges to a nearly black frame.
+    exposure: int = 0
 
 
 @dataclass(frozen=True)
@@ -239,6 +243,7 @@ def _build_camera(raw: Mapping[str, Any]) -> CameraConfig:
         fps=_in_range(_as_int(_get(raw, "fps", 30, "camera"), "camera.fps"), 1, 240, "camera.fps"),
         fourcc=_as_str(_get(raw, "fourcc", "MJPG", "camera"), "camera.fourcc"),
         buffersize=_in_range(_as_int(_get(raw, "buffersize", 1, "camera"), "camera.buffersize"), 1, 16, "camera.buffersize"),
+        exposure=_in_range(_as_int(_get(raw, "exposure", 0, "camera"), "camera.exposure"), 0, 20000, "camera.exposure"),
     )
 
 

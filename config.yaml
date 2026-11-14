@@ -18,6 +18,11 @@ camera:
   # MJPG es obligatorio: sin el, OpenCV negocia YUYV y cae a 5 fps a 720p.
   fourcc: MJPG
   buffersize: 1
+  # Exposicion manual en unidades del driver (0 = no tocar la del driver).
+  # Con este montaje la exposicion automatica no sirve: converge a un frame
+  # casi negro (V medio 10 de 255) y el detector no ve el maiz. Medido el
+  # 2026-11-13 en la Raspberry: 2400 deja la escena bien expuesta.
+  exposure: 0
 
 roi:
   # Caja contenedora del poligono de la banda. Fracciones del frame, no

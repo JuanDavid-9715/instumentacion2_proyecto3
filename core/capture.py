@@ -140,6 +140,14 @@ class FrameGrabber(threading.Thread):
         capture.set(cv2.CAP_PROP_FPS, cfg.fps)
         capture.set(cv2.CAP_PROP_BUFFERSIZE, cfg.buffersize)
 
+        # Exposure: an explicit value means "manual". Left at 0 the driver keeps
+        # its own mode, which on the Pi stays at auto and converges to a nearly
+        # black frame with this lighting. The order matters: manual first, then
+        # the absolute value, or the driver discards it.
+        if cfg.exposure > 0:
+            capture.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            capture.set(cv2.CAP_PROP_EXPOSURE, float(cfg.exposure))
+
         actual_w = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = capture.get(cv2.CAP_PROP_FPS)

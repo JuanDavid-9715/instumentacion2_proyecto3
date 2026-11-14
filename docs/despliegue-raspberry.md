@@ -198,28 +198,64 @@ actuator:
 
 ---
 
-## 7. Controles de la cámara (cada sesión)
+## 7. Exposición de la cámara
 
-Los controles V4L2 **no sobreviven** a un reinicio ni a reconectar la cámara, y el
-proyecto no usa autostart por decisión de alcance. Se aplican a mano al empezar:
+**La exposición la aplica la aplicación**, desde `camera.exposure` en
+`config.local.yaml`. No hay que ejecutar `v4l2-ctl` a mano: los controles V4L2 son
+por descriptor de archivo y se pierden al cerrar la cámara, mientras que el proceso
+que captura los fija en cada arranque.
 
-```bash
-v4l2-ctl -d /dev/video0 \
-  -c white_balance_automatic=1 \
-  -c backlight_compensation=0 \
-  -c exposure_dynamic_framerate=0 \
-  -c auto_exposure=1 \
-  -c exposure_time_absolute=300 \
-  -c gain=0
+```yaml
+camera:
+  exposure: 1800    # 0 = no tocar la del driver
 ```
 
-Sin esto la cámara vuelve a exposición automática: el brillo oscila, los umbrales se
-invalidan solos y aparecen pausas falsas.
+### Por qué no sirve la exposición automática
 
-Comprueba que quedaron aplicados:
+Con este montaje (interior, banda oscura y sin iluminación dedicada) la exposición
+automática mide sobre todo el cuadro, ve un fondo negro y converge a un frame casi
+negro: **V medio 7-10 de 255**. Con ese brillo los granos no alcanzan
+`val_min: 80` y el detector devuelve cero cajas.
+
+La guía traía `exposure_time_absolute=300`, que es exactamente el mismo problema:
+V medio 7. Por eso el sistema "dejó de detectar" aunque los umbrales no cambiaron.
+
+### Valor medido y compromiso con el fps
+
+La unidad de `exposure_time_absolute` en esta cámara es de **100 µs**, así que la
+exposición fija el techo de fps: `fps ≈ 1 / (exposure × 100 µs)`.
+
+Medido el 2026-11-13 en la Raspberry, con 11 granos sobre la banda:
+
+| exposure | fps | V medio | cajas detectadas |
+|---|---|---|---|
+| 600 | 17.8 | 17.6 | 0 |
+| 900 | 12.1 | 30.6 | 0 |
+| 1200 | 9.2 | 38.3 | 0 |
+| 1500 | 7.4 | 36.7 | 8-9 |
+| **1800** | **6.2** | **42.2** | **10-11** |
+| 2400 | 4.7 | 57.0 | 10-11 |
+| 4800 | — | 111.6 | 8-9 |
+
+Dos conclusiones que no son obvias:
+
+1. **Más exposición no es mejor.** Por encima de 2400 los granos se saturan a
+   blanco, la saturación HSV cae por debajo de `sat_min: 80` y el umbral los
+   descarta: a 4800 se ven los 11 granos pero solo detecta 8.
+2. **La ganancia no sustituye a la exposición.** Con `gain` alto el ruido de color
+   rompe el umbral y la detección cae a cero aunque el brillo suba.
+
+`1800` es el mejor punto: detecta los 11 granos con el área más grande
+(~7 100 px) y da un 32% más de fps que 2400. El precio es 6 fps en vez de los ~26
+que esperaba la guía original; es el límite de la iluminación actual, no del
+código. Si hace falta más velocidad, hay que iluminar la banda, no subir la
+exposición.
+
+Comprueba que la app la aplicó:
 
 ```bash
-v4l2-ctl -d /dev/video0 --list-ctrls | grep -E "auto_exposure|exposure_time|white_balance_auto|gain"
+curl -s http://localhost:8000/api/state
+# "fps" ≈ 6 con exposure 1800; si sale ≈ 15 y 0 cajas, la exposición no se aplicó
 ```
 
 ---
@@ -232,7 +268,8 @@ v4l2-ctl -d /dev/video0 --list-ctrls | grep -E "auto_exposure|exposure_time|whit
 python app.py -c config.local.yaml --probe
 ```
 
-Esperado: `"opened": true`, `"width": 1280`, `"height": 720`, `"fps"` alrededor de 26.
+Esperado: `"opened": true`, `"width": 1280`, `"height": 720`, `"fps"` según la
+exposición configurada (§7): ~6 con `exposure: 1800`.
 
 **Pruebas:**
 
@@ -349,10 +386,82 @@ que rehacer si cambia el montaje.
 
 ---
 
-## 14. Lista de comprobación para el informe
+## 14. Arranque automático (opcional, se quita con un comando)
+
+Sin `sudo`. Usa `cron @reboot`, que arranca sin sesión gráfica:
+
+```bash
+cd /home/digitales/Proyectos/Univercidad_ECCI/10InstrumentacionIndustrial2/ProyectoFinal
+LINEA="@reboot cd $PWD && sleep 20 && ./.venv/bin/python app.py -c config.local.yaml >>/tmp/app.log 2>&1"
+( crontab -l 2>/dev/null | grep -v 'app.py -c config.local.yaml'; echo "$LINEA" ) | crontab -
+```
+
+El `sleep 20` da tiempo a que el kernel enumere la cámara USB (`/dev/video0`).
+
+**Para quitarlo** (deja el resto de tu crontab intacto):
+
+```bash
+crontab -l | grep -v 'app.py -c config.local.yaml' | crontab -
+```
+
+**Para detener la app** sin tocar el arranque automático:
+
+```bash
+ps -eo pid,args | grep "[.]venv/bin/python app.py" | awk '{print $1}' | xargs -r kill
+```
+
+> No uses `pkill -f "app.py -c config.local.yaml"`: el patrón coincide con la propia
+> sesión SSH y la mata.
+
+Comprueba que quedó registrado:
+
+```bash
+crontab -l
+```
+
+### Acceso sin depender de la IP
+
+Con `avahi-daemon` activo (viene en Raspberry Pi OS), la Pi responde por mDNS:
+
+```bash
+ssh digitales@raspberrypi.local
+```
+
+Y la web queda en `http://raspberrypi.local:8000`, aunque el router cambie la IP.
+Si `.local` no resuelve desde tu PC, usa la IP que muestre `hostname -I`.
+
+---
+
+## 15. Calibración para banda en movimiento
+
+Los umbrales de `config.yaml` están calibrados con la banda **detenida**. Cuando la
+banda gira, el grano deja una estela por la exposición larga (§7), y esa estela es
+más tenue y menos saturada que el grano quieto: con `sat_min: 80` y `val_min: 80`
+solo se detecta a ratos.
+
+Medido el 2026-11-13 con dos granos pegados a la banda en movimiento:
+
+| parámetro | banda quieta | banda en movimiento |
+|---|---|---|
+| `sat_min` | 80 | **50** |
+| `val_min` | 80 | **35** |
+| `confirm_frames` | 3 | **1** |
+
+`confirm_frames: 1` baja la latencia de confirmación de 483 ms a 161 ms a 6 fps.
+Bajar los umbrales no introdujo falsos positivos: con la banda limpia el área
+detectada es 0 px.
+
+Estos valores van en `config.local.yaml` de la Pi, no en `config.yaml`, porque
+dependen de la cámara y de la iluminación del montaje. El límite físico sigue
+siendo el blur: `exposure × velocidad`. Para banda rápida hace falta iluminación
+y exposición corta (§7).
+
+---
+
+## 16. Lista de comprobación para el informe
 
 - [ ] `pytest` en verde en la Pi
-- [ ] `--probe` con 1280×720 y ~26 fps
+- [ ] `--probe` con 1280×720 y el fps que fije `camera.exposure` (§7)
 - [ ] Relé desenergizado con la Pi apagada (continuidad COM–NC)
 - [ ] Línea en pausa al energizar el PLC con la Pi apagada
 - [ ] Línea marcha con banda limpia
