@@ -58,3 +58,6 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# Herramientas del agente
+.atl/
